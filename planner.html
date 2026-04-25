@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Horarios de Personal</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; }
+        .controls { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; padding: 15px; background: #e9ecef; border-radius: 5px; }
+        .controls div { display: flex; flex-direction: column; gap: 5px; }
+        .day-editor { border: 1px solid #ddd; margin-bottom: 15px; padding: 15px; border-radius: 5px; background-color: #fafafa; }
+        .day-editor h3 { margin-top: 0; border-bottom: 2px solid #34495e; padding-bottom: 5px; color: #34495e; }
+        .column-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .column-section { border: 1px solid #eee; padding: 10px; border-radius: 3px; background: #fff; }
+        .column-header { font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #ccc; text-align: center; }
+        .employee-list { display: flex; flex-direction: column; gap: 8px; }
+        .employee-row { display: grid; grid-template-columns: 1.5fr 1fr 40px; gap: 5px; align-items: center; border-bottom: 1px solid #f1f1f1; padding-bottom: 5px; }
+        .employee-row select, .employee-row input[type="text"] { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 3px; font-size: 14px; }
+        .employee-row .custom-schedule { margin-top: 5px; }
+        .hidden { display: none !important; }
+        .btn { padding: 8px 15px; border: none; border-radius: 3px; cursor: pointer; color: #fff; font-size: 14px; text-decoration: none; display: inline-block; }
+        .btn-primary { background-color: #3498db; }
+        .btn-success { background-color: #2ecc71; }
+        .btn-danger { background-color: #e74c3c; padding: 6px 10px; }
+        .btn-small { padding: 4px 8px; font-size: 12px; }
+        #finalize-btn { display: block; width: 100%; margin-top: 20px; padding: 12px; font-size: 16px; font-weight: bold; }
+        #preview-section { margin-top: 30px; border-top: 2px solid #ccc; padding-top: 20px; text-align: center; }
+        #schedule-preview-table-container { background: #f9f9f9; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        #copy-image-btn { display: none; margin-top: 15px; }
+        #download-btn { display: none; margin-top: 15px; }
+
+        /* Estilos de la tabla final que coinciden con el diseño institucional */
+        .final-table { border-collapse: collapse; width: 100%; border: 1px solid #333; font-family: Arial, sans-serif; font-size: 14px; color: #333; }
+        .final-table th, .final-table td { border: 1px solid #a8b0b8; text-align: left; vertical-align: top; }
+        .final-table .spacer { border: none; height: 10px; }
+
+        /* Estilos de las secciones institucionales */
+        .final-table thead tr:first-child th { background-color: #2c3e50; color: #fff; text-align: center; font-size: 18px; padding: 15px; text-transform: uppercase; border: none; }
+        .final-table .title-box { padding: 10px; text-align: center; border: none; }
+        .final-table .title-box div { color: #d35400; border: 2px solid #d35400; padding: 10px; display: inline-block; font-weight: bold; text-transform: uppercase; }
+        .final-table .week-bar { background-color: #d6eaf8; color: #21618c; font-weight: bold; text-align: center; padding: 8px; text-transform: capitalize; border: none; font-size: 16px;}
+        
+        .final-table .header-row th { background-color: #ecf0f1; color: #34495e; font-weight: bold; text-align: left; padding: 8px; text-transform: capitalize; border: none; }
+        .final-table th.dia-col { width: 120px; }
+        .final-table th.office-col { width: 180px; }
+        .final-table th.horario-col { width: 100px; }
+        .final-table th.homeoffice-col { width: 180px; }
+        .final-table th.horario-col { width: 100px; }
+
+        .final-table .day-row td.dia-cell { padding: 8px; background-color: #ecf0f1; color: #34495e; font-weight: bold; text-align: left; vertical-align: middle; white-space: nowrap; }
+        .final-table .day-row td { padding: 8px; border: 1px solid #a8b0b8; }
+        .final-table .day-row .empty-cell { background-color: transparent; border: 1px solid #a8b0b8;}
+
+        .final-table .manager-row td { padding: 8px; color: #555; }
+        .final-table .manager-row .empty-cell { background-color: transparent; }
+
+        .image-output { border: 1px solid #ddd; max-width: 100%; margin-top: 15px; }
+        
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Generador de Horarios Institucionales</h1>
+    
+    <div class="controls">
+        <div>
+            <label for="week-start-date">Seleccione cualquier día de la semana:</label>
+            <input type="date" id="week-start-date">
+        </div>
+        <div>
+            <label for="header-text">Texto de Encabezado:</label>
+            <input type="text" id="header-text" value="HEADER">
+        </div>
+        <div>
+            <label for="footer-text">Texto de Pie de Página:</label>
+            <input type="text" id="footer-text" value="FOOTER">
+        </div>
+        <div style="align-self: flex-end;">
+            <button id="generate-editor-btn" class="btn btn-primary">Generar Editor de Horario</button>
+        </div>
+    </div>
+
+    <div id="editor-container" class="hidden">
+        </div>
+
+    <button id="finalize-btn" class="btn btn-success hidden">Finalizar y Generar Imagen</button>
+
+    <div id="preview-section" class="hidden">
+        <h2>Vista Previa del Horario Finalizado</h2>
+        <div id="schedule-preview-table-container">
+            </div>
+        <img id="image-output" class="image-output hidden" alt="Horario Final en Imagen">
+        <div class="action-buttons">
+            <button id="copy-image-btn" class="btn btn-success">Copiar Imagen al Portapapeles</button>
+            <a id="download-btn" class="btn btn-primary" download="horario_semanal.png">Descargar Imagen</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Listas ficticias de empleados
+    const ALL_EMPLOYEES = [
+        "Demo 1", "Demo 2", "Demo 3", "Demo 4", "Demo 5", "Demo 6", 
+        "Manager 1", "Manager 2", "Manager 3"
+    ];
+
+    const DAYS_OF_WEEK_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    let startDate, endDate, weekDays = [];
+
+    // Al hacer clic en Generar Editor
+    document.getElementById('generate-editor-btn').addEventListener('click', generateScheduleEditor);
+    
+    // Al hacer clic en Finalizar
+    document.getElementById('finalize-btn').addEventListener('click', finalizeSchedule);
+
+    // Al hacer clic en Copiar Imagen
+    document.getElementById('copy-image-btn').addEventListener('click', copyImageToClipboard);
+
+    function getMonday(d) {
+        d = new Date(d);
+        let day = d.getDay(),
+            diff = d.getDate() - day + (day == 0 ? -6:1); // ajusta cuando el día es domingo
+        return new Date(d.setDate(diff));
+    }
+
+    function formatDateEs(date) {
+        return `${date.getDate()} ${MONTHS_ES[date.getMonth()]}`;
+    }
+
+    function getWeekNumber(d) {
+        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDate()||7));
+        let yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+        let weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
+        return weekNo;
+    }
+
+    function generateScheduleEditor() {
+        const dateInput = document.getElementById('week-start-date');
+        if (!dateInput.value) { alert('Por favor, seleccione una fecha.'); return; }
+
+        const selectedDate = new Date(dateInput.value + 'T00:00:00');
+        startDate = getMonday(selectedDate);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        weekDays = [];
+        
+        for (let i = 0; i < 7; i++) {
+            let dayDate = new Date(startDate);
+            dayDate.setDate(startDate.getDate() + i);
+            weekDays.push(dayDate);
+        }
+
+        const editorContainer = document.getElementById('editor-container');
+        editorContainer.innerHTML = '';
+        editorContainer.classList.remove('hidden');
+        document.getElementById('finalize-btn').classList.remove('hidden');
+        document.getElementById('preview-section').classList.add('hidden');
+
+        weekDays.forEach((dayDate, index) => {
+            const dayName = DAYS_OF_WEEK_ES[index];
+            const formattedDate = formatDateEs(dayDate);
+            const dayEditor = document.createElement('div');
+            dayEditor.className = 'day-editor';
+            dayEditor.id = `day-editor-${index}`;
+            dayEditor.innerHTML = `
+                <h3>${dayName} ${formattedDate}</h3>
+                <div class="column-editor">
+                    <div class="column-section office-section">
+                        <div class="column-header">Oficina</div>
+                        <div class="employee-list" id="office-list-${index}">
+                            ${index === 0 ? createEmployeeRow(0, "office", ALL_EMPLOYEES[0], "08:00 - 17:00") + createEmployeeRow(1, "office", ALL_EMPLOYEES[1], "09:00 - 18:00") : ''}
+                            ${index === 1 ? createEmployeeRow(0, "office", ALL_EMPLOYEES[3], "10:00 - 19:00") : ''}
+                            ${index === 2 ? createEmployeeRow(0, "office", ALL_EMPLOYEES[1], "08:00 - 17:00") + createEmployeeRow(1, "office", ALL_EMPLOYEES[3], "20:00 - 06:00") : ''}
+                        </div>
+                        <button class="btn btn-primary btn-small add-employee-btn" data-day-index="${index}" data-column="office">+ Agregar a Oficina</button>
+                    </div>
+                    <div class="column-section home-office-section">
+                        <div class="column-header">Home Office</div>
+                        <div class="employee-list" id="home-office-list-${index}">
+                            ${index === 0 ? createEmployeeRow(0, "home-office", ALL_EMPLOYEES[3], "10:00 - 19:00") : ''}
+                            ${index === 1 ? createEmployeeRow(0, "home-office", ALL_EMPLOYEES[0], "08:00 - 17:00") + createEmployeeRow(1, "home-office", ALL_EMPLOYEES[1], "09:00 - 18:00") : ''}
+                            ${index === 2 ? createEmployeeRow(0, "home-office", ALL_EMPLOYEES[0], "Apoyo (Mixto)") : ''}
+                        </div>
+                        <button class="btn btn-primary btn-small add-employee-btn" data-day-index="${index}" data-column="home-office">+ Agregar a Home Office</button>
+                    </div>
+                </div>
+                <div class="column-editor" style="margin-top: 15px;">
+                    <div class="column-section manager-section office-manager-section" style="border-top: 2px solid #ccc;">
+                        <div class="column-header">Managers Oficina</div>
+                        <div class="employee-list" id="office-manager-list-${index}">
+                            ${index === 0 || index === 2 ? createEmployeeRow(0, "office-manager", "Manager 1", "------") + createEmployeeRow(1, "office-manager", "Manager 2", "------") : ''}
+                        </div>
+                    </div>
+                    <div class="column-section manager-section home-office-manager-section" style="border-top: 2px solid #ccc;">
+                        <div class="column-header">Managers Home Office</div>
+                        <div class="employee-list" id="home-office-manager-list-${index}">
+                            ${index === 1 || index === 2 ? createEmployeeRow(0, "home-office-manager", "Manager 1", "------") + createEmployeeRow(1, "home-office-manager", "Manager 2", "------") : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            editorContainer.appendChild(dayEditor);
+        } );
+
+        // Agregar listeners para botones de agregar empleado
+        const addBtns = document.querySelectorAll('.add-employee-btn');
+        addBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const dayIndex = this.getAttribute('data-day-index');
+                const column = this.getAttribute('data-column');
+                const listId = `${column}-list-${dayIndex}`;
+                const list = document.getElementById(listId);
+                const employeeCount = list.querySelectorAll('.employee-row').length;
+                list.insertAdjacentHTML('beforeend', createEmployeeRow(employeeCount, column));
+                addRemoveButtonListeners();
+                addScheduleSelectListeners();
+            });
+        });
+
+        addRemoveButtonListeners();
+        addScheduleSelectListeners();
+    }
+
+    function createEmployeeRow(count, column, employeeName = '', schedule = '') {
+        let isManager = column.includes('manager');
+        let optionsHtml = '';
+        ALL_EMPLOYEES.forEach(emp => {
+            if (emp.includes('Manager') === isManager) { // Filtra managers o empleados
+                optionsHtml += `<option value="${emp}" ${emp === employeeName ? 'selected' : ''}>${emp}</option>`;
+            }
+        });
+
+        // Opciones de horario comunes
+        const commonSchedules = [
+            {value: "08:00 - 17:00", label: "08:00-17:00"},
+            {value: "09:00 - 18:00", label: "09:00-18:00"},
+            {value: "10:00 - 19:00", label: "10:00-19:00"},
+            {value: "------", label: "N/A (------)"},
+            {value: "Apoyo (Mixto)", label: "Apoyo (Mixto)"},
+            {value: "Custom", label: "Otro rango..."}
+        ];
+        
+        let scheduleSelectHtml = '<select class="schedule-select">';
+        let isCustom = true;
+        commonSchedules.forEach(opt => {
+            let isSelected = opt.value === schedule;
+            scheduleSelectHtml += `<option value="${opt.value}" ${isSelected ? 'selected' : ''}>${opt.label}</option>`;
+            if (isSelected) isCustom = false;
+        });
+        if (schedule === '') isCustom = false; // Sin horario seleccionado
+        
+        // Si es custom o no se encuentra en las comunes, añadir la opción "Custom" y el campo de texto
+        if (isCustom) {
+            scheduleSelectHtml += `<option value="Custom" selected>Otro rango...</option>`;
+        }
+        scheduleSelectHtml += '</select>';
+
+        let customScheduleInputHtml = `<input type="text" class="custom-schedule-input ${isCustom ? '' : 'hidden'}" placeholder="ej. 14:00 - 22:00" value="${isCustom ? schedule : ''}">`;
+
+        return `
+            <div class="employee-row" data-count="${count}" data-column="${column}">
+                <select class="employee-select">
+                    <option value="">Seleccionar Empleado</option>
+                    ${optionsHtml}
+                </select>
+                <div class="schedule-inputs">
+                    ${scheduleSelectHtml}
+                    ${customScheduleInputHtml}
+                </div>
+                ${!isManager ? `<button class="btn btn-danger btn-small remove-employee-btn">x</button>` : ''}
+            </div>
+        `;
+    }
+
+    function addRemoveButtonListeners() {
+        const removeBtns = document.querySelectorAll('.remove-employee-btn');
+        removeBtns.forEach(btn => {
+            btn.onclick = function() {
+                this.parentElement.remove();
+            };
+        });
+    }
+
+    function addScheduleSelectListeners() {
+        const scheduleSelects = document.querySelectorAll('.schedule-select');
+        scheduleSelects.forEach(select => {
+            select.onchange = function() {
+                const customInput = this.parentElement.querySelector('.custom-schedule-input');
+                if (this.value === 'Custom') {
+                    customInput.classList.remove('hidden');
+                } else {
+                    customInput.classList.add('hidden');
+                    customInput.value = ''; // Resetea el valor si no es custom
+                }
+            };
+        });
+    }
+
+    function finalizeSchedule() {
+        // Recopila datos de todo el editor
+        const scheduleData = [];
+        for (let i = 0; i < 7; i++) {
+            const dayEditor = document.getElementById(`day-editor-${i}`);
+            
+            function getList(id) {
+                const list = dayEditor.querySelector(`#${id}`);
+                const rows = list.querySelectorAll('.employee-row');
+                return Array.from(rows).map(row => {
+                    const employee = row.querySelector('.employee-select').value;
+                    const scheduleSelect = row.querySelector('.schedule-select').value;
+                    const customScheduleInput = row.querySelector('.custom-schedule-input').value;
+                    const schedule = scheduleSelect === 'Custom' ? customScheduleInput : scheduleSelect;
+                    return { employee, schedule };
+                }).filter(entry => entry.employee); // Filtra entradas sin empleado
+            }
+
+            scheduleData.push({
+                dayIndex: i,
+                dayName: DAYS_OF_WEEK_ES[i],
+                formattedDate: formatDateEs(weekDays[i]),
+                officeEmployees: getList(`office-list-${i}`),
+                homeOfficeEmployees: getList(`home-office-list-${i}`),
+                officeManagers: getList(`office-manager-list-${i}`),
+                homeOfficeManagers: getList(`home-office-manager-list-${i}`)
+            });
+        }
+
+        // Genera la tabla final de visualización
+        const headerText = document.getElementById('header-text').value;
+        const footerText = document.getElementById('footer-text').value;
+        const weekNum = getWeekNumber(startDate);
+
+        const previewContainer = document.getElementById('schedule-preview-table-container');
+        previewContainer.innerHTML = '';
+        
+        let tableHtml = `
+            <table class="final-table" id="final-display-table" style="border-collapse: collapse; width: 100%; border: 1px solid #333; font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+                <thead>
+                    <tr style="background-color: #2c3e50; color: #fff; text-align: center; font-size: 18px; padding: 15px; text-transform: uppercase; border: none;">
+                        <th colspan="5" style="padding: 15px;">${headerText}</th>
+                    </tr>
+                    <tr>
+                        <td colspan="5" style="border: none; padding: 10px; text-align: center;">
+                            <div style="color: #d35400; border: 2px solid #d35400; padding: 10px; display: inline-block; font-weight: bold; text-transform: uppercase;">
+                                SEDES ESPECIALISTAS<br>
+                                ${startDate.getDate()}-${MONTHS_ES[startDate.getMonth()]} al ${endDate.getDate()} de ${MONTHS_ES[endDate.getMonth()]} ${endDate.getFullYear()}
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" style="background-color: #d6eaf8; color: #21618c; font-weight: bold; text-align: center; padding: 8px; text-transform: capitalize; border: none; font-size: 16px;">
+                            Semana {${weekNum}}
+                        </td>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        scheduleData.forEach((dayData, dayIndex) => {
+            tableHtml += `<tr class="spacer"><td colspan="5" style="border: none; height: 10px;"></td></tr>`;
+            
+            // Fila de encabezado por día
+            tableHtml += `
+                <tr class="header-row" style="background-color: #ecf0f1; color: #34495e; font-weight: bold; text-align: left; padding: 8px; text-transform: capitalize; border: none;">
+                    <th style="padding: 8px;">Dia</th>
+                    <th style="padding: 8px;">Oficina</th>
+                    <th style="padding: 8px;">Horario</th>
+                    <th style="padding: 8px;">Home Office</th>
+                    <th style="padding: 8px;">Horario</th>
+                </tr>
+            `;
+
+            // Combina listas de empleados y managers, asegurando alineación
+            const maxRows = Math.max(
+                dayData.officeEmployees.length + dayData.officeManagers.length,
+                dayData.homeOfficeEmployees.length + dayData.homeOfficeManagers.length
+            );
+
+            for (let i = 0; i < maxRows; i++) {
+                let officeEntry = dayData.officeEmployees[i] || dayData.officeManagers[i - dayData.officeEmployees.length] || null;
+                let homeOfficeEntry = dayData.homeOfficeEmployees[i] || dayData.homeOfficeManagers[i - dayData.homeOfficeEmployees.length] || null;
+                
+                tableHtml += `<tr class="day-row" style="padding: 8px; border: 1px solid #a8b0b8;">`;
+                if (i === 0) {
+                    tableHtml += `
+                        <td rowspan="${maxRows}" class="dia-cell" style="padding: 8px; background-color: #ecf0f1; color: #34495e; font-weight: bold; text-align: left; vertical-align: middle; white-space: nowrap;">
+                            ${dayData.dayName} ${dayData.formattedDate}
+                        </td>`;
+                }
+
+                function getEntryHtml(entry) {
+                    return entry 
+                        ? `<td style="padding: 8px; border: 1px solid #a8b0b8;">${entry.employee}</td><td style="padding: 8px; border: 1px solid #a8b0b8;">${entry.schedule}</td>`
+                        : `<td class="empty-cell" style="background-color: transparent; border: 1px solid #a8b0b8;"></td><td class="empty-cell" style="background-color: transparent; border: 1px solid #a8b0b8;"></td>`;
+                }
+
+                tableHtml += getEntryHtml(officeEntry);
+                tableHtml += getEntryHtml(homeOfficeEntry);
+                tableHtml += `</tr>`;
+            }
+        });
+
+        tableHtml += `
+                    <tr class="spacer"><td colspan="5" style="border: none; height: 10px;"></td></tr>
+                </tbody>
+                <tfoot>
+                    <tr style="background-color: #ecf0f1; color: #34495e; font-weight: bold; text-align: left; padding: 15px; text-transform: uppercase; border: none;">
+                        <th colspan="5" style="padding: 15px;">${footerText}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
+
+        previewContainer.innerHTML = tableHtml;
+        document.getElementById('preview-section').classList.remove('hidden');
+
+        // Genera la imagen a partir de la tabla
+        generateImage();
+    }
+
+    function generateImage() {
+        const tableContainer = document.getElementById('schedule-preview-table-container');
+        const imageOutput = document.getElementById('image-output');
+        const copyBtn = document.getElementById('copy-image-btn');
+        const downloadBtn = document.getElementById('download-btn');
+
+        // Limpia la imagen previa
+        imageOutput.classList.add('hidden');
+        copyBtn.classList.add('hidden');
+        downloadBtn.classList.add('hidden');
+
+        // Usa html2canvas para renderizar la tabla como una imagen
+        html2canvas(tableContainer, {
+            scale: 2, // Mejora la calidad de la imagen
+            logging: false,
+            useCORS: true
+        }).then(canvas => {
+            const imgUrl = canvas.toDataURL("image/png");
+            imageOutput.src = imgUrl;
+            imageOutput.classList.remove('hidden');
+            copyBtn.classList.remove('hidden');
+            
+            downloadBtn.href = imgUrl;
+            downloadBtn.classList.remove('hidden');
+        });
+    }
+
+    async function copyImageToClipboard() {
+        const imageOutput = document.getElementById('image-output');
+        if (!imageOutput.src) return;
+
+        try {
+            const data = await fetch(imageOutput.src);
+            const blob = await data.blob();
+            await navigator.clipboard.write([
+                new ClipboardItem({ [blob.type]: blob })
+            ]);
+            alert('¡Imagen copiada al portapapeles! Ya puedes pegarla en el cuerpo de tu correo.');
+        } catch (err) {
+            console.error('Error al copiar imagen:', err);
+            alert('Lo siento, no pude copiar la imagen. Intenta descargarla o usar un navegador más moderno.');
+        }
+    }
+
+    // Inicializa la fecha con el día de hoy
+    document.getElementById('week-start-date').valueAsDate = new Date();
+
+</script>
+</body>
+</html>
